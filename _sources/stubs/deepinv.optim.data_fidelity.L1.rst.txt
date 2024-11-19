@@ -1,0 +1,15 @@
+﻿L1
+==
+
+.. currentmodule:: deepinv.optim.data_fidelity
+
+.. autoclass:: L1
+   :members:
+   :show-inheritance:
+   :no-undoc-members:
+   :special-members: __mul__, __add__, __div__, __neg__, __sub__, __truediv__
+
+.. _sphx_glr_backref_deepinv.optim.data_fidelity.L1:
+
+.. minigallery:: deepinv.optim.data_fidelity.L1
+    :add-heading: Examples using ``L1``:

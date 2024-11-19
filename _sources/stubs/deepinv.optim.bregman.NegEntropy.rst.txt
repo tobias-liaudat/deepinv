@@ -1,0 +1,15 @@
+﻿NegEntropy
+==========
+
+.. currentmodule:: deepinv.optim.bregman
+
+.. autoclass:: NegEntropy
+   :members:
+   :show-inheritance:
+   :no-undoc-members:
+   :special-members: __mul__, __add__, __div__, __neg__, __sub__, __truediv__
+
+.. _sphx_glr_backref_deepinv.optim.bregman.NegEntropy:
+
+.. minigallery:: deepinv.optim.bregman.NegEntropy
+    :add-heading: Examples using ``NegEntropy``:

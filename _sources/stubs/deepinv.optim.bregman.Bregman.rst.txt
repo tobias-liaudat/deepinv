@@ -1,0 +1,15 @@
+﻿Bregman
+=======
+
+.. currentmodule:: deepinv.optim.bregman
+
+.. autoclass:: Bregman
+   :members:
+   :show-inheritance:
+   :no-undoc-members:
+   :special-members: __mul__, __add__, __div__, __neg__, __sub__, __truediv__
+
+.. _sphx_glr_backref_deepinv.optim.bregman.Bregman:
+
+.. minigallery:: deepinv.optim.bregman.Bregman
+    :add-heading: Examples using ``Bregman``:
