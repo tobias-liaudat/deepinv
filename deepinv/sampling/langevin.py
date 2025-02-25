@@ -61,12 +61,21 @@ class MonteCarlo(nn.Module):
     :param function_handle g_statistic: The sampler will compute the posterior mean and variance
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
-    :param bool save_chain:
-    :param bool save_online_stats:
-    :param online_stats_func
-    :param run_until_convergence
-    :param num_samples_online_stats
+    :param bool save_chain: saves the thinned Monte Carlo samples (after burn-in iterations).
+    :param bool save_online_stats: saves online statistics for the last ``num_samples_online_stats`` number of
+        thinned samples evaluating each function in the list ``online_stats_func``. This feature is useful for
+        computing desired statistics when saving the full Markov chain is unfeasible dur to memory constraints.
+        This feature can prove helpful to compute coverage plots.
+    :param list of function_handle online_stats_func: list of functions to evaluate online statistics.
+    :param int num_samples_online_stats: number of samples to evaluate online statistics.
+    :param bool run_until_convergence: if True, the algorithm will run until the convergence criteria on the
+    tracked mean of the ``g_statistic`` applied to the samples is met. Then the algorithm will start collecting
+    the online statistics if ``save_online_stats=True``.
     :param bool verbose: prints progress of the algorithm.
+
+    :warning: If ``save_online_stats=True``, ``run_until_convergence=True`` and Markov chain has not yet converged when the ``max_iter`` number of iterations is reached, the algorithm will add more iterations until the convergence criteria is met and the ``num_samples_online_stats``number of samples are collected. If the first two conditions are not met, the Markov chain will run for ``max_iter`` iterations.
+
+    :note: The total number of samples obtained when running the Markov Chain Monte Carlo algorithm is given by ``max_iter*(1-burnin_ratio)//thinning``.
 
     """
 
@@ -85,8 +94,8 @@ class MonteCarlo(nn.Module):
         save_chain=False,
         save_online_stats=False,
         online_stats_func=[],
-        run_until_convergence=False,
         num_samples_online_stats=50,
+        run_until_convergence=False,
         verbose=False,
     ):
         super(MonteCarlo, self).__init__()
@@ -94,23 +103,24 @@ class MonteCarlo(nn.Module):
         self.iterator = iterator
         self.prior = prior
         self.likelihood = data_fidelity
-        self.C_set = clip
-        self.thinning = thinning
         self.max_iter = int(max_iter)
+        self.burnin_iter = int(burnin_ratio * max_iter)
+        self.thinning = thinning
+        self.C_set = clip
         self.thresh_conv = thresh_conv
         self.crit_conv = crit_conv
-        self.burnin_iter = int(burnin_ratio * max_iter)
-        self.verbose = verbose
-        self.mean_convergence = False
-        self.var_convergence = False
-        self.save_online_stats = save_online_stats
-        self.online_stats_func = online_stats_func
-        self.run_until_convergence = run_until_convergence
-        self.num_samples_online_stats = num_samples_online_stats
         self.g_function = g_statistic
         self.save_chain = save_chain
+        self.save_online_stats = save_online_stats
+        self.online_stats_func = online_stats_func
+        self.num_samples_online_stats = num_samples_online_stats
+        self.run_until_convergence = run_until_convergence
+        self.verbose = verbose
+
         self.chain = []
         self.online_stats = [[] for it in range(len(self.online_stats_func))]
+        self.mean_convergence = False
+        self.var_convergence = False
 
     def forward(self, y, physics, seed=None, x_init=None):
         r"""
