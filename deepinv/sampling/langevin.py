@@ -58,9 +58,14 @@ class MonteCarlo(nn.Module):
     :param tuple clip: Tuple containing the box-constraints :math:`[a,b]`.
         If ``None``, the algorithm will not project the samples.
     :param float crit_conv: Threshold for verifying the convergence of the mean and variance estimates.
-    :param Callable g_statistic: The sampler will compute the posterior mean and variance
+    :param function_handle g_statistic: The sampler will compute the posterior mean and variance
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
+    :param bool save_chain:
+    :param bool save_online_stats:
+    :param online_stats_func
+    :param run_until_convergence
+    :param num_samples_online_stats
     :param bool verbose: prints progress of the algorithm.
 
     """
@@ -76,8 +81,12 @@ class MonteCarlo(nn.Module):
         clip=(-1.0, 2.0),
         thresh_conv=1e-3,
         crit_conv="residual",
-        save_chain=False,
         g_statistic=lambda x: x,
+        save_chain=False,
+        save_online_stats=False,
+        online_stats_func=[],
+        run_until_convergence=False,
+        num_samples_online_stats=50,
         verbose=False,
     ):
         super(MonteCarlo, self).__init__()
@@ -94,9 +103,14 @@ class MonteCarlo(nn.Module):
         self.verbose = verbose
         self.mean_convergence = False
         self.var_convergence = False
+        self.save_online_stats = save_online_stats
+        self.online_stats_func = online_stats_func
+        self.run_until_convergence = run_until_convergence
+        self.num_samples_online_stats = num_samples_online_stats
         self.g_function = g_statistic
         self.save_chain = save_chain
         self.chain = []
+        self.online_stats = [[] for it in range(len(self.online_stats_func))]
 
     def forward(self, y, physics, seed=None, x_init=None):
         r"""
@@ -129,7 +143,9 @@ class MonteCarlo(nn.Module):
 
             self.mean_convergence = False
             self.var_convergence = False
-            for it in tqdm(range(self.max_iter), disable=(not self.verbose)):
+            # for it in tqdm(range(self.max_iter), disable=(not self.verbose)):
+            it = 0
+            while it < self.max_iter:
                 x = self.iterator(
                     x, y, physics, likelihood=self.likelihood, prior=self.prior
                 )
@@ -138,6 +154,9 @@ class MonteCarlo(nn.Module):
                     x = projbox(x, C_lower_lim, C_upper_lim)
 
                 if it >= self.burnin_iter and (it % self.thinning) == 0:
+                    # Save mean before updating online statistics
+                    previous_online_mean = statistics.mean().clone()
+
                     if it >= (self.max_iter - self.thinning):
                         mean_prev = statistics.mean().clone()
                         var_prev = statistics.var().clone()
@@ -145,6 +164,60 @@ class MonteCarlo(nn.Module):
 
                     if self.save_chain:
                         self.chain.append(x.clone())
+
+                    # Save online statistics for coverage
+                    if self.save_online_stats:
+                        # current_online_mean = statistics.mean().clone()
+                        if not self.mean_convergence:
+                            if (
+                                check_conv(
+                                    {"est": (previous_online_mean,)},
+                                    {"est": (statistics.mean().clone(),)},
+                                    it,
+                                    self.crit_conv,
+                                    self.thresh_conv,
+                                    self.verbose,
+                                )
+                                and it > 1
+                            ):
+                                self.mean_convergence = True
+                                print(
+                                    f"The posterior mean has converged at iteration {it:d}. Starting to save online statistics."
+                                )
+                                # Check if we have enough samples for the coverage statistics
+                                remaining_num_samples = int(
+                                    (self.max_iter - it) / self.thinning
+                                )
+
+                                if (
+                                    remaining_num_samples
+                                    < self.num_samples_online_stats
+                                ):
+                                    # Update the total number of samples
+                                    self.max_iter += (
+                                        self.num_samples_online_stats
+                                        - remaining_num_samples
+                                        - 1
+                                    ) * self.thinning
+
+                        if self.mean_convergence:  # and self.var_convergence:
+                            for idx in range(len(self.online_stats_func)):
+                                self.online_stats[idx].append(
+                                    self.online_stats_func[idx](x.clone(), statistics)
+                                )
+
+                        if (
+                            not self.mean_convergence
+                            and self.run_until_convergence
+                            and it >= (self.max_iter - self.thinning)
+                        ):
+                            self.max_iter += self.thinning
+                            print(
+                                f"Adding more iterations until convergence, max_iter={self.max_iter}"
+                            )
+
+                # Update iteration
+                it += 1
 
             if self.verbose:
                 if torch.cuda.is_available():
@@ -190,11 +263,18 @@ class MonteCarlo(nn.Module):
         """
         return self.chain
 
+    def get_online_statistics(self):
+        r"""
+        Returns online statistics...
+        """
+        return self.online_stats
+
     def reset(self):
         r"""
         Resets the Markov chain.
         """
         self.chain = []
+        self.online_stats = [[] for it in range(len(self.online_stats_func))]
         self.mean_convergence = False
         self.var_convergence = False
 
