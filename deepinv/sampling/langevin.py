@@ -369,6 +369,15 @@ class ULA(MonteCarlo):
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
     :param bool save_chain: saves the thinned Monte Carlo samples (after burn-in iterations).
+    :param bool save_online_stats: saves online statistics for the last ``num_samples_online_stats`` number of
+        thinned samples evaluating each function in the list ``online_stats_func``. This feature is useful for
+        computing desired statistics when saving the full Markov chain is unfeasible dur to memory constraints.
+        This feature can prove helpful to compute coverage plots.
+    :param list of function_handle online_stats_func: list of functions to evaluate online statistics.
+    :param int num_samples_online_stats: number of samples to evaluate online statistics.
+    :param bool run_until_convergence: if True, the algorithm will run until the convergence criteria on the
+    tracked mean of the ``g_statistic`` applied to the samples is met. Then the algorithm will start collecting
+    the online statistics if ``save_online_stats=True``.
     :param bool verbose: prints progress of the algorithm.
 
     """
@@ -498,11 +507,19 @@ class SKRock(MonteCarlo):
         If ``None``, the algorithm will not project the samples.
     :param str crit_conv: Convergence criteria for the mean and variance estimates. It can be either ``"residual"`` or ``"cost"``.
     :param float thresh_conv: Threshold for verifying the convergence of the mean and variance estimates.
-    :param bool save_chain: saves the thinned Monte Carlo samples (after burn-in iterations).
     :param Callable g_statistic: The sampler will compute the posterior mean and variance
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
-
+    :param bool save_chain: saves the thinned Monte Carlo samples (after burn-in iterations).
+    :param bool save_online_stats: saves online statistics for the last ``num_samples_online_stats`` number of
+        thinned samples evaluating each function in the list ``online_stats_func``. This feature is useful for
+        computing desired statistics when saving the full Markov chain is unfeasible dur to memory constraints.
+        This feature can prove helpful to compute coverage plots.
+    :param list of function_handle online_stats_func: list of functions to evaluate online statistics.
+    :param int num_samples_online_stats: number of samples to evaluate online statistics.
+    :param bool run_until_convergence: if True, the algorithm will run until the convergence criteria on the
+    tracked mean of the ``g_statistic`` applied to the samples is met. Then the algorithm will start collecting
+    the online statistics if ``save_online_stats=True``.
     :param bool verbose: prints progress of the algorithm.
 
     """
@@ -522,8 +539,8 @@ class SKRock(MonteCarlo):
         clip=(-1.0, 2.0),
         crit_conv="residual",
         thresh_conv=1e-3,
-        save_chain=False,
         g_statistic=lambda x: x,
+        save_chain=False,
         save_online_stats=False,
         online_stats_func=[],
         num_samples_online_stats=50,
