@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 import numpy as np
 from pathlib import Path
 from deepinv.utils.plotting import config_matplotlib
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 
 
 class Welford:
@@ -51,7 +51,7 @@ class CoveragePlotGenerator(nn.Module):
         confidence_levels,
         number_mc_samples=100,
         coverage_statistic="l2",  # HPD or l2-ball
-        # convergence_criteria,
+        use_online_stats=False,
         device=torch.device("cpu"),
         verbose=False,
     ):
@@ -66,11 +66,10 @@ class CoveragePlotGenerator(nn.Module):
         self.coverage_statistic = coverage_statistic
         self.confidence_levels = confidence_levels
         self.number_mc_samples = number_mc_samples
-        # self.convergence_criteria = convergence_criteria
+        self.use_online_stats = use_online_stats
         self.device = device
-
-        #
         self.dataset_len = len(dataset)
+        self.verbose = verbose
 
         # Build store tensors
         self.empirical_coverage = np.zeros((len(self.confidence_levels)))
@@ -99,36 +98,37 @@ class CoveragePlotGenerator(nn.Module):
             plt.show()
 
     def compute_coverage(self, batch_size=32):
-        # if torch.cuda.is_available():
-        #     device = dinv.utils.get_freer_gpu()
-        # else:
-        #     device = torch.device('cpu')
 
         if self.coverage_statistic == "l2":
             dataloader = DataLoader(self.dataset, batch_size, shuffle=False)
-            for x, _ in dataloader:
+            for x, y in dataloader:
                 x = x.to(self.device)
-                # print("x.shape: ", x.shape)
-                y = self.physics(x)
-                # print("y.shape: ", y.shape)
-                mean, _ = self.sampling_model(
-                    y, self.physics, x_init=self.physics.A_adj(x)
+                y = y.to(self.device)
+                mean, var = self.sampling_model(
+                    y, self.physics, x_init=self.physics.A_adjoint(y)
                 )
-                samples = self.sampling_model.get_chain()
 
-                # print("len(samples): ", len(samples))
-                # print("samples[0].shape: ", samples[0].shape)
-                # print("mean.shape: ", mean.shape)
-
+                # Get oracle error
                 true_mse = self.mse(x, mean)
                 true_mse = torch.tensor(true_mse)
 
-                estimated_mse = np.array([self.mse(sample, mean) for sample in samples])
+                if self.use_online_stats:
+                    # Shape estimated_mse = [number_samples, batch_size, len(statistic_online_func)]
+                    estimated_mse = self.sampling_model.get_online_statistics()
+                    # Turning the nested list of statistics into a np.ndarray and then to tensor
+                    estimated_mse = np.array(estimated_mse)
+                    estimated_mse = torch.tensor(estimated_mse[0])
+                    # TODO: Add iteration over online statistic functions
 
-                # print("len(estimated_mse): ", len(estimated_mse))
-                # print("estimated_mse[0].shape: ", estimated_mse[0].shape)
-                estimated_mse = torch.tensor(estimated_mse)
+                else:
+                    samples = self.sampling_model.get_chain()
+                    estimated_mse = np.array(
+                        [self.mse(sample, mean) for sample in samples]
+                    )
+                    # Shape estimated_mse = [number_samples, batch_size]
+                    estimated_mse = torch.tensor(estimated_mse)
 
+                # TODO: Add iteration over online statistic functions
                 for idx in range(len(self.confidence_levels)):
                     q = torch.quantile(
                         estimated_mse, self.confidence_levels[idx], dim=0
@@ -140,5 +140,6 @@ class CoveragePlotGenerator(nn.Module):
 
             self.empirical_coverage = self.empirical_coverage / self.dataset_len
 
+            # TODO: Add iteration over online statistic functions in the plots
             self.coverage_plot()
             return self.empirical_coverage
