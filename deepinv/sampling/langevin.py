@@ -57,7 +57,8 @@ class MonteCarlo(nn.Module):
         The burn-in samples are discarded constant with a numerical algorithm.
     :param tuple clip: Tuple containing the box-constraints :math:`[a,b]`.
         If ``None``, the algorithm will not project the samples.
-    :param float crit_conv: Threshold for verifying the convergence of the mean and variance estimates.
+    :param str crit_conv: Convergence criteria for the mean and variance estimates. It can be either ``"residual"`` or ``"cost"``.
+    :param float thresh_conv: Threshold for verifying the convergence of the mean and variance estimates.
     :param function_handle g_statistic: The sampler will compute the posterior mean and variance
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
@@ -88,8 +89,8 @@ class MonteCarlo(nn.Module):
         burnin_ratio=0.2,
         thinning=10,
         clip=(-1.0, 2.0),
-        thresh_conv=1e-3,
         crit_conv="residual",
+        thresh_conv=1e-3,
         g_statistic=lambda x: x,
         save_chain=False,
         save_online_stats=False,
@@ -107,8 +108,8 @@ class MonteCarlo(nn.Module):
         self.burnin_iter = int(burnin_ratio * max_iter)
         self.thinning = thinning
         self.C_set = clip
-        self.thresh_conv = thresh_conv
         self.crit_conv = crit_conv
+        self.thresh_conv = thresh_conv
         self.g_function = g_statistic
         self.save_chain = save_chain
         self.save_online_stats = save_online_stats
@@ -362,10 +363,12 @@ class ULA(MonteCarlo):
         The burn-in samples are discarded constant with a numerical algorithm.
     :param tuple clip: Tuple containing the box-constraints :math:`[a,b]`.
         If ``None``, the algorithm will not project the samples.
-    :param float crit_conv: Threshold for verifying the convergence of the mean and variance estimates.
+    :param str crit_conv: Convergence criteria for the mean and variance estimates. It can be either ``"residual"`` or ``"cost"``.
+    :param float thresh_conv: Threshold for verifying the convergence of the mean and variance estimates.
     :param Callable g_statistic: The sampler will compute the posterior mean and variance
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
+    :param bool save_chain: saves the thinned Monte Carlo samples (after burn-in iterations).
     :param bool verbose: prints progress of the algorithm.
 
     """
@@ -381,9 +384,10 @@ class ULA(MonteCarlo):
         thinning=5,
         burnin_ratio=0.2,
         clip=(-1.0, 2.0),
+        crit_conv="residual",
         thresh_conv=1e-3,
-        save_chain=False,
         g_statistic=lambda x: x,
+        save_chain=False,
         verbose=False,
     ):
         iterator = ULAIterator(step_size=step_size, alpha=alpha, sigma=sigma)
@@ -392,6 +396,7 @@ class ULA(MonteCarlo):
             prior,
             data_fidelity,
             max_iter=max_iter,
+            crit_conv=crit_conv,
             thresh_conv=thresh_conv,
             g_statistic=g_statistic,
             burnin_ratio=burnin_ratio,
@@ -471,22 +476,25 @@ class SKRock(MonteCarlo):
     :param deepinv.optim.DataFidelity, torch.nn.Module data_fidelity: negative log-likelihood function linked with the
         noise distribution in the acquisition physics.
     :param float step_size: Step size of the algorithm. Tip: use physics.lipschitz to compute the Lipschitz
+    :param int inner_iter: Number of inner SKROCK iterations.
     :param float eta: :math:`\eta` SKROCK damping parameter.
     :param float alpha: regularization parameter :math:`\alpha`.
-    :param int inner_iter: Number of inner SKROCK iterations.
     :param int max_iter: Number of outer iterations.
-    :param int thinning: Thins the Markov Chain by an integer :math:`\geq 1` (i.e., keeping one out of ``thinning``
-        samples to compute posterior statistics).
     :param float burnin_ratio: percentage of iterations used for burn-in period. The burn-in samples are discarded
         constant with a numerical algorithm.
+    :param int thinning: Thins the Markov Chain by an integer :math:`\geq 1` (i.e., keeping one out of ``thinning``
+        samples to compute posterior statistics).
     :param tuple clip: Tuple containing the box-constraints :math:`[a,b]`.
         If ``None``, the algorithm will not project the samples.
-    :param bool verbose: prints progress of the algorithm.
-    :param float sigma: noise level used in the plug-and-play prior denoiser. A larger value of sigma will result in
-        a more regularized reconstruction.
+    :param str crit_conv: Convergence criteria for the mean and variance estimates. It can be either ``"residual"`` or ``"cost"``.
+    :param float thresh_conv: Threshold for verifying the convergence of the mean and variance estimates.
+    :param bool save_chain: saves the thinned Monte Carlo samples (after burn-in iterations).
     :param Callable g_statistic: The sampler will compute the posterior mean and variance
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
+    :param float sigma: noise level used in the plug-and-play prior denoiser. A larger value of sigma will result in
+        a more regularized reconstruction.
+    :param bool verbose: prints progress of the algorithm.
 
     """
 
@@ -502,11 +510,12 @@ class SKRock(MonteCarlo):
         burnin_ratio=0.2,
         thinning=10,
         clip=(-1.0, 2.0),
+        crit_conv="residual",
         thresh_conv=1e-3,
         save_chain=False,
         g_statistic=lambda x: x,
-        verbose=False,
         sigma=0.05,
+        verbose=False,
     ):
         iterator = SKRockIterator(
             step_size=step_size,
@@ -520,6 +529,7 @@ class SKRock(MonteCarlo):
             prior,
             data_fidelity,
             max_iter=max_iter,
+            crit_conv=crit_conv,
             thresh_conv=thresh_conv,
             thinning=thinning,
             burnin_ratio=burnin_ratio,
