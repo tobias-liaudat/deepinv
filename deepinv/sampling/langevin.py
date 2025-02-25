@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 import time as time
-
+from typing import Union, Tuple, Callable
 import deepinv.optim
 from tqdm import tqdm
 from deepinv.optim.utils import check_conv
@@ -50,12 +50,12 @@ class MonteCarlo(nn.Module):
     :param deepinv.optim.ScorePrior prior: negative log-prior based on a trained or model-based denoiser.
     :param deepinv.optim.DataFidelity data_fidelity: negative log-likelihood function linked with the
         noise distribution in the acquisition physics.
-    :param int max_iter: number of Monte Carlo iterations.
+    :param Union[int, float] max_iter: number of Monte Carlo iterations.
     :param int thinning: thins the Monte Carlo samples by an integer :math:`\geq 1` (i.e., keeping one out of ``thinning``
         samples to compute posterior statistics).
     :param float burnin_ratio: percentage of iterations used for burn-in period, should be set between 0 and 1.
         The burn-in samples are discarded constant with a numerical algorithm.
-    :param tuple clip: Tuple containing the box-constraints :math:`[a,b]`.
+    :param Tuple[float, float] clip: Tuple containing the box-constraints :math:`[a,b]`.
         If ``None``, the algorithm will not project the samples.
     :param str crit_conv: Convergence criteria for the mean and variance estimates. It can be either ``"residual"`` or ``"cost"``.
     :param float thresh_conv: Threshold for verifying the convergence of the mean and variance estimates.
@@ -68,15 +68,19 @@ class MonteCarlo(nn.Module):
         computing desired statistics when saving the full Markov chain is unfeasible dur to memory constraints.
         This feature can prove helpful to compute coverage plots.
     :param list of function_handle online_stats_func: list of functions to evaluate online statistics.
-    :param int num_samples_online_stats: number of samples to evaluate online statistics.
+    :param Union[int, float] num_samples_online_stats: number of samples to evaluate online statistics.
     :param bool run_until_convergence: if True, the algorithm will run until the convergence criteria on the
     tracked mean of the ``g_statistic`` applied to the samples is met. Then the algorithm will start collecting
     the online statistics if ``save_online_stats=True``.
     :param bool verbose: prints progress of the algorithm.
 
-    :warning: If ``save_online_stats=True``, ``run_until_convergence=True`` and Markov chain has not yet converged when the ``max_iter`` number of iterations is reached, the algorithm will add more iterations until the convergence criteria is met and the ``num_samples_online_stats``number of samples are collected. If the first two conditions are not met, the Markov chain will run for ``max_iter`` iterations.
+    .. warning::
 
-    :note: The total number of samples obtained when running the Markov Chain Monte Carlo algorithm is given by ``(max_iter-int(max_iter*burnin_ratio))//thinning``.
+        If ``save_online_stats=True``, ``run_until_convergence=True`` and Markov chain has not yet converged when the ``max_iter`` number of iterations is reached, the algorithm will add more iterations until the convergence criteria is met and the ``num_samples_online_stats``number of samples are collected. If the first two conditions are not met, the Markov chain will run for ``max_iter`` iterations.
+
+    .. note::
+
+        The total number of samples obtained when running the Markov Chain Monte Carlo algorithm is given by ``(max_iter-int(max_iter*burnin_ratio))//thinning``.
 
     """
 
@@ -85,19 +89,19 @@ class MonteCarlo(nn.Module):
         iterator: torch.nn.Module,
         prior: deepinv.optim.ScorePrior,
         data_fidelity: deepinv.optim.DataFidelity,
-        max_iter=1e3,
-        burnin_ratio=0.2,
-        thinning=10,
-        clip=(-1.0, 2.0),
-        crit_conv="residual",
-        thresh_conv=1e-3,
-        g_statistic=lambda x: x,
-        save_chain=False,
-        save_online_stats=False,
-        online_stats_func=[],
-        num_samples_online_stats=50,
-        run_until_convergence=False,
-        verbose=False,
+        max_iter: Union[int, float] = 1e3,
+        burnin_ratio: float = 0.2,
+        thinning: int = 10,
+        clip: Tuple[float, float] = (-1.0, 2.0),
+        crit_conv: str = "residual",
+        thresh_conv: float = 1e-3,
+        g_statistic: Callable = lambda x: x,
+        save_chain: bool = False,
+        save_online_stats: bool = False,
+        online_stats_func: list = [],
+        num_samples_online_stats: Union[int, float] = 50,
+        run_until_convergence: bool = False,
+        verbose: bool = False,
     ):
         super(MonteCarlo, self).__init__()
 
@@ -114,7 +118,7 @@ class MonteCarlo(nn.Module):
         self.save_chain = save_chain
         self.save_online_stats = save_online_stats
         self.online_stats_func = online_stats_func
-        self.num_samples_online_stats = num_samples_online_stats
+        self.num_samples_online_stats = int(num_samples_online_stats)
         self.run_until_convergence = run_until_convergence
         self.verbose = verbose
 
