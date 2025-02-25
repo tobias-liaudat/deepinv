@@ -154,7 +154,7 @@ class MonteCarlo(nn.Module):
 
             self.mean_convergence = False
             self.var_convergence = False
-            # for it in tqdm(range(self.max_iter), disable=(not self.verbose)):
+
             it = 0
             while it < self.max_iter:
                 x = self.iterator(
@@ -176,9 +176,8 @@ class MonteCarlo(nn.Module):
                     if self.save_chain:
                         self.chain.append(x.clone())
 
-                    # Save online statistics for coverage
+                    # Save online statistics
                     if self.save_online_stats:
-                        # current_online_mean = statistics.mean().clone()
                         if not self.mean_convergence:
                             if (
                                 check_conv(
@@ -195,7 +194,7 @@ class MonteCarlo(nn.Module):
                                 print(
                                     f"The posterior mean has converged at iteration {it:d}. Starting to save online statistics."
                                 )
-                                # Check if we have enough samples for the coverage statistics
+                                # Check if we have enough samples for the required number of online statistics samples
                                 remaining_num_samples = int(
                                     (self.max_iter - it) / self.thinning
                                 )
@@ -211,7 +210,9 @@ class MonteCarlo(nn.Module):
                                         - 1
                                     ) * self.thinning
 
-                        if self.mean_convergence:  # and self.var_convergence:
+                        # NOTE: For the moment we consider the chain has converged if the mean has converged
+                        # In the future we could have a more sophisticated convergence criteria
+                        if self.mean_convergence:
                             for idx in range(len(self.online_stats_func)):
                                 self.online_stats[idx].append(
                                     self.online_stats_func[idx](x.clone(), statistics)
