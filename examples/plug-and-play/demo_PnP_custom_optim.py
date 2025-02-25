@@ -22,7 +22,7 @@ from deepinv.optim.optim_iterators import OptimIterator, fStep, gStep
 # Define a custom optimization algorithm
 # ----------------------------------------------------------------------------------------
 # Creating your optimization algorithm only requires the definition of an iteration step.
-# The iterator should be a subclass of :class:`deepinv.optim.optim_iterators.OptimIterator`.
+# The iterator should be a subclass of :class:`deepinv.optim.OptimIterator`.
 #
 # The Condat-Vu Primal-Dual algorithm is defined as follows:
 #
@@ -114,7 +114,7 @@ class fStepCV(fStep):
         :param torch.Tensor y: Input data.
         :param deepinv.physics physics: Instance of the physics modeling the data-fidelity term.
         """
-        return cur_data_fidelity.prox_d_conjugate(u, y, gamma=cur_params["sigma"])
+        return cur_data_fidelity.d.prox_conjugate(u, y, gamma=cur_params["sigma"])
 
 
 class gStepCV(gStep):

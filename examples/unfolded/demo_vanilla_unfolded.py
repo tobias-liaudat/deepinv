@@ -24,7 +24,6 @@ from deepinv.utils.demo import load_dataset
 #
 
 BASE_DIR = Path(".")
-ORIGINAL_DATA_DIR = BASE_DIR / "datasets"
 DATA_DIR = BASE_DIR / "measurements"
 RESULTS_DIR = BASE_DIR / "results"
 CKPT_DIR = BASE_DIR / "ckpts"
@@ -60,12 +59,8 @@ train_transform = transforms.Compose(
     [transforms.RandomCrop(img_size), transforms.ToTensor()]
 )
 # Define the base train and test datasets of clean images.
-train_base_dataset = load_dataset(
-    train_dataset_name, ORIGINAL_DATA_DIR, transform=train_transform
-)
-test_base_dataset = load_dataset(
-    test_dataset_name, ORIGINAL_DATA_DIR, transform=test_transform
-)
+train_base_dataset = load_dataset(train_dataset_name, transform=train_transform)
+test_base_dataset = load_dataset(test_dataset_name, transform=test_transform)
 
 # Use parallel dataloader if using a GPU to fasten training, otherwise, as all computes are on CPU, use synchronous
 # dataloading.
@@ -105,7 +100,7 @@ test_dataset = dinv.datasets.HDF5Dataset(path=generated_datasets_path, train=Fal
 # %%
 # Define the unfolded PnP algorithm.
 # ----------------------------------------------------------------------------------------
-# We use the helper function :meth:`deepinv.unfolded.unfolded_builder` to defined the Unfolded architecture.
+# We use the helper function :func:`deepinv.unfolded.unfolded_builder` to defined the Unfolded architecture.
 # The chosen algorithm is here DRS (Douglas-Rachford Splitting).
 # Note that if the prior (resp. a parameter) is initialized with a list of lenght max_iter,
 # then a distinct model (resp. parameter) is trained for each iteration.
@@ -179,7 +174,7 @@ test_dataloader = DataLoader(
 # %%
 # Train the network
 # ----------------------------------------------------------------------------------------
-# We train the network using the :meth:`deepinv.Trainer` class.
+# We train the network using the :class:`deepinv.Trainer` class.
 
 trainer = dinv.Trainer(
     model,
@@ -205,13 +200,34 @@ model = trainer.train()
 # --------------------------------------------
 #
 #
-
 trainer.test(test_dataloader)
 
+test_sample, _ = next(iter(test_dataloader))
+model.eval()
+test_sample = test_sample.to(device)
+
+# Get the measurements and the ground truth
+y = physics(test_sample)
+with torch.no_grad():
+    rec = model(y, physics=physics)
+
+backprojected = physics.A_adjoint(y)
+
+dinv.utils.plot(
+    [backprojected, rec, test_sample],
+    titles=["Linear", "Reconstruction", "Ground truth"],
+    suptitle="Reconstruction results",
+)
+
+
 # %%
-# Plotting the trained parameters.
+# Plotting the weights of the network.
 # ------------------------------------
+#
+# We now plot the weights of the network that were learned and check that they are different from their initialization
+# values. Note that ``g_param`` corresponds to :math:`\lambda` in the proximal gradient algorithm.
+#
 
 dinv.utils.plotting.plot_parameters(
-    model, init_params=params_algo, save_dir=RESULTS_DIR / "unfolded_drs" / operation
+    model, init_params=params_algo, save_dir=RESULTS_DIR / "unfolded_pgd" / operation
 )

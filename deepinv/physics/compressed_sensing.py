@@ -48,8 +48,11 @@ class CompressedSensing(LinearPhysics):
     :math:`D\in\mathbb{R}^{n\times n}` is a fast orthogonal transform (DST-1) and
     :math:`\text{diag}(m)\in\mathbb{R}^{m\times n}` is random subsampling matrix, which keeps :math:`m` out of :math:`n` entries.
 
-    It is recommended to use ``fast=True`` for image sizes bigger than 32 x 32, since the forward computation with
-    ``fast=False`` has an :math:`O(mn)` complexity, whereas with ``fast=True`` it has an :math:`O(n \log n)` complexity.
+    For image sizes bigger than 32 x 32, the forward computation can be prohibitively expensive due to its :math:`O(mn)` complexity.
+    In this case, we recommend using :class:`deepinv.physics.StructuredRandom` instead.
+
+    .. deprecated:: 0.2.2
+       The ``fast`` option is deprecated and might be removed in future versions. Use :class:`deepinv.physics.StructuredRandom` instead.
 
     An existing operator can be loaded from a saved .pth file via ``self.load_state_dict(save_path)``,
     in a similar fashion to :class:`torch.nn.Module`.
@@ -65,15 +68,15 @@ class CompressedSensing(LinearPhysics):
 
     .. math::
 
-        A_{i,j} \sim \mathcal{N} \left( 0, \frac{1}{2m}) \right) + \mathrm{i} \mathcal{N} \left( 0, \frac{1}{2m} \right).
+        A_{i,j} \sim \mathcal{N} \left( 0, \frac{1}{2m} \right) + \mathrm{i} \mathcal{N} \left( 0, \frac{1}{2m} \right).
 
     :param int m: number of measurements.
     :param tuple img_shape: shape (C, H, W) of inputs.
     :param bool fast: The operator is iid Gaussian if false, otherwise A is a SORS matrix with the Discrete Sine Transform (type I).
     :param bool channelwise: Channels are processed independently using the same random forward operator.
-    :param torch.type dtype: Forward matrix is stored as a dtype. For complex matrices, use torch.cfloat. Default is torch.float.
+    :param torch.dtype dtype: Forward matrix is stored as a dtype. For complex matrices, use torch.cfloat. Default is torch.float.
     :param str device: Device to store the forward matrix.
-    :param torch.Generator (Optional) rng: a pseudorandom random number generator for the parameter generation.
+    :param torch.Generator rng: (optional) a pseudorandom random number generator for the parameter generation.
         If ``None``, the default Generator of PyTorch will be used.
 
     |sep|
