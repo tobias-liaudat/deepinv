@@ -5,6 +5,7 @@ from typing import Union, Tuple, Callable
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from deepinv.utils.plotting import config_matplotlib
 from deepinv.sampling.langevin import MonteCarlo
@@ -18,21 +19,21 @@ class Welford:
     https://doi.org/10.2307/1266577
     """
 
-    def __init__(self, x):
+    def __init__(self, x: torch.Tensor):
         self.k = 1
         self.M = x.clone()
         self.S = torch.zeros_like(x)
 
-    def update(self, x):
+    def update(self, x: torch.Tensor):
         self.k += 1
         Mnext = self.M + (x - self.M) / self.k
         self.S = self.S + (x - self.M) * (x - Mnext)
         self.M = Mnext
 
-    def mean(self):
+    def mean(self) -> torch.Tensor:
         return self.M
 
-    def var(self):
+    def var(self) -> torch.Tensor:
         return self.S / (self.k - 1)
 
 
@@ -53,10 +54,11 @@ class CoveragePlotGenerator(nn.Module):
     :param deepinv.sampling.langevin.MonteCarlo sampling_model:
     :param np.ndarray confidence_levels:
     :param Union[int, float] number_mc_samples:
-    :param bool use_online_stats:
-    :param list coverage_statistics_funcs:
-    :param torch.device device:
-    :param bool verbose:
+    :param bool use_online_stats: Use online statistics from the sampling model to compute the coverage plot. If ``use_online_stats=False``, provide a list of coverage statistics functions.
+    :param list coverage_statistics_funcs: List of coverage statistics functions. If ``use_online_stats=True``, the list of coverage statistics functions is ignored.
+    :param int batch_size: Batch size for the dataloader.
+    :param torch.device device: Device to run the model on.
+    :param bool verbose: Print information during the computation.
 
     """
 
@@ -69,6 +71,7 @@ class CoveragePlotGenerator(nn.Module):
         number_mc_samples: Union[int, float] = 100,
         use_online_stats: bool = False,
         coverage_statistics_funcs: list = [],
+        batch_size: int = 32,
         device: torch.device = torch.device("cpu"),
         verbose: bool = False,
     ):
@@ -84,12 +87,15 @@ class CoveragePlotGenerator(nn.Module):
         self.number_mc_samples = int(number_mc_samples)
         self.use_online_stats = use_online_stats
         self.coverage_statistics_funcs = coverage_statistics_funcs
-        self.device = device
         self.dataset_len = len(dataset)
+        self.batch_size = batch_size
+        self.device = device
         self.verbose = verbose
 
         # Build store tensors
         self.empirical_coverage = np.zeros((len(self.confidence_levels)))
+        # Instanciate dataloader
+        self.dataloader = DataLoader(self.dataset, self.batch_size, shuffle=False)
 
         if not use_online_stats and len(coverage_statistics_funcs) == 0:
             raise ValueError(
@@ -119,13 +125,18 @@ class CoveragePlotGenerator(nn.Module):
         if show:
             plt.show()
 
-    def compute_coverage(self, batch_size=32):
+    def compute_coverage(self):
 
-        dataloader = DataLoader(self.dataset, batch_size, shuffle=False)
-        for x, y in dataloader:
+        for step, data in tqdm(
+            enumerate(self.dataloader),
+            total=self.dataset_len,
+            desc="Computing coverage",
+            disable=(not self.verbose),
+        ):
+            x, y = data
             x = x.to(self.device)
             y = y.to(self.device)
-            mean, var = self.sampling_model(
+            mean, _ = self.sampling_model(
                 y, self.physics, x_init=self.physics.A_adjoint(y)
             )
 
