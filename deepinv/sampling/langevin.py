@@ -531,10 +531,10 @@ class SKRock(MonteCarlo):
             max_iter=max_iter,
             crit_conv=crit_conv,
             thresh_conv=thresh_conv,
-            thinning=thinning,
+            g_statistic=g_statistic,
             burnin_ratio=burnin_ratio,
             clip=clip,
-            g_statistic=g_statistic,
+            thinning=thinning,
             save_chain=save_chain,
             verbose=verbose,
         )
