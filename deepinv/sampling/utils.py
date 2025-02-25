@@ -1,10 +1,14 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+from typing import Union, Tuple, Callable
 import numpy as np
 from pathlib import Path
-from deepinv.utils.plotting import config_matplotlib
 import matplotlib.pyplot as plt
+
+from deepinv.utils.plotting import config_matplotlib
+from deepinv.sampling.langevin import MonteCarlo
+from deepinv.physics import Physics
 
 
 class Welford:
@@ -42,18 +46,31 @@ def projbox(x, lower: torch.Tensor, upper: torch.Tensor) -> torch.Tensor:
 
 
 class CoveragePlotGenerator(nn.Module):
+    r"""Coverage Plot Generator.
+
+    :param deepinv.physics.Physics physics:
+    :param torch.utils.data.Dataset dataset:
+    :param deepinv.sampling.langevin.MonteCarlo sampling_model:
+    :param np.ndarray confidence_levels:
+    :param Union[int, float] number_mc_samples:
+    :param bool use_online_stats:
+    :param list coverage_statistics_funcs:
+    :param torch.device device:
+    :param bool verbose:
+
+    """
 
     def __init__(
         self,
-        physics,
-        dataset,
-        sampling_model,
-        confidence_levels,
-        number_mc_samples=100,
-        coverage_statistic="l2",  # HPD or l2-ball
-        use_online_stats=False,
-        device=torch.device("cpu"),
-        verbose=False,
+        physics: Physics,
+        dataset: Dataset,
+        sampling_model: MonteCarlo,
+        confidence_levels: np.ndarray = np.linspace(0.1, 0.9, 10),
+        number_mc_samples: Union[int, float] = 100,
+        use_online_stats: bool = False,
+        coverage_statistics_funcs: list = [],
+        device: torch.device = torch.device("cpu"),
+        verbose: bool = False,
     ):
         super(CoveragePlotGenerator, self).__init__()
 
@@ -63,16 +80,21 @@ class CoveragePlotGenerator(nn.Module):
         self.physics = physics.to(device)
         self.dataset = dataset
         self.sampling_model = sampling_model
-        self.coverage_statistic = coverage_statistic
         self.confidence_levels = confidence_levels
-        self.number_mc_samples = number_mc_samples
+        self.number_mc_samples = int(number_mc_samples)
         self.use_online_stats = use_online_stats
+        self.coverage_statistics_funcs = coverage_statistics_funcs
         self.device = device
         self.dataset_len = len(dataset)
         self.verbose = verbose
 
         # Build store tensors
         self.empirical_coverage = np.zeros((len(self.confidence_levels)))
+
+        if not use_online_stats and len(coverage_statistics_funcs) == 0:
+            raise ValueError(
+                "Please use online statistics from the sampling model or provide a list of coverage statistics functions."
+            )
 
     @staticmethod
     def mse(a, b):
@@ -99,47 +121,42 @@ class CoveragePlotGenerator(nn.Module):
 
     def compute_coverage(self, batch_size=32):
 
-        if self.coverage_statistic == "l2":
-            dataloader = DataLoader(self.dataset, batch_size, shuffle=False)
-            for x, y in dataloader:
-                x = x.to(self.device)
-                y = y.to(self.device)
-                mean, var = self.sampling_model(
-                    y, self.physics, x_init=self.physics.A_adjoint(y)
-                )
+        dataloader = DataLoader(self.dataset, batch_size, shuffle=False)
+        for x, y in dataloader:
+            x = x.to(self.device)
+            y = y.to(self.device)
+            mean, var = self.sampling_model(
+                y, self.physics, x_init=self.physics.A_adjoint(y)
+            )
 
-                # Get oracle error
-                true_mse = self.mse(x, mean)
-                true_mse = torch.tensor(true_mse)
+            # Get oracle error
+            true_mse = self.mse(x, mean)
+            true_mse = torch.tensor(true_mse)
 
-                if self.use_online_stats:
-                    # Shape estimated_mse = [number_samples, batch_size, len(statistic_online_func)]
-                    estimated_mse = self.sampling_model.get_online_statistics()
-                    # Turning the nested list of statistics into a np.ndarray and then to tensor
-                    estimated_mse = np.array(estimated_mse)
-                    estimated_mse = torch.tensor(estimated_mse[0])
-                    # TODO: Add iteration over online statistic functions
-
-                else:
-                    samples = self.sampling_model.get_chain()
-                    estimated_mse = np.array(
-                        [self.mse(sample, mean) for sample in samples]
-                    )
-                    # Shape estimated_mse = [number_samples, batch_size]
-                    estimated_mse = torch.tensor(estimated_mse)
-
+            if self.use_online_stats:
+                # Shape estimated_mse = [number_samples, batch_size, len(statistic_online_func)]
+                estimated_mse = self.sampling_model.get_online_statistics()
+                # Turning the nested list of statistics into a np.ndarray and then to tensor
+                estimated_mse = np.array(estimated_mse)
+                estimated_mse = torch.tensor(estimated_mse[0])
                 # TODO: Add iteration over online statistic functions
-                for idx in range(len(self.confidence_levels)):
-                    q = torch.quantile(
-                        estimated_mse, self.confidence_levels[idx], dim=0
-                    )
-                    self.empirical_coverage[idx] += torch.sum(true_mse < q).cpu().item()
 
-                # Reset markov chain model
-                self.sampling_model.reset()
+            else:
+                samples = self.sampling_model.get_chain()
+                estimated_mse = np.array([self.mse(sample, mean) for sample in samples])
+                # Shape estimated_mse = [number_samples, batch_size]
+                estimated_mse = torch.tensor(estimated_mse)
 
-            self.empirical_coverage = self.empirical_coverage / self.dataset_len
+            # TODO: Add iteration over online statistic functions
+            for idx in range(len(self.confidence_levels)):
+                q = torch.quantile(estimated_mse, self.confidence_levels[idx], dim=0)
+                self.empirical_coverage[idx] += torch.sum(true_mse < q).cpu().item()
 
-            # TODO: Add iteration over online statistic functions in the plots
-            self.coverage_plot()
-            return self.empirical_coverage
+            # Reset markov chain model
+            self.sampling_model.reset()
+
+        self.empirical_coverage = self.empirical_coverage / self.dataset_len
+
+        # TODO: Add iteration over online statistic functions in the plots
+        self.coverage_plot()
+        return self.empirical_coverage
