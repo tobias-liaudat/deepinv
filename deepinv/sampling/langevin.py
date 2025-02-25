@@ -76,7 +76,7 @@ class MonteCarlo(nn.Module):
 
     :warning: If ``save_online_stats=True``, ``run_until_convergence=True`` and Markov chain has not yet converged when the ``max_iter`` number of iterations is reached, the algorithm will add more iterations until the convergence criteria is met and the ``num_samples_online_stats``number of samples are collected. If the first two conditions are not met, the Markov chain will run for ``max_iter`` iterations.
 
-    :note: The total number of samples obtained when running the Markov Chain Monte Carlo algorithm is given by ``max_iter*(1-burnin_ratio)//thinning``.
+    :note: The total number of samples obtained when running the Markov Chain Monte Carlo algorithm is given by ``(max_iter-int(max_iter*burnin_ratio))//thinning``.
 
     """
 
@@ -388,6 +388,10 @@ class ULA(MonteCarlo):
         thresh_conv=1e-3,
         g_statistic=lambda x: x,
         save_chain=False,
+        save_online_stats=False,
+        online_stats_func=[],
+        num_samples_online_stats=50,
+        run_until_convergence=False,
         verbose=False,
     ):
         iterator = ULAIterator(step_size=step_size, alpha=alpha, sigma=sigma)
@@ -403,6 +407,10 @@ class ULA(MonteCarlo):
             clip=clip,
             thinning=thinning,
             save_chain=save_chain,
+            save_online_stats=save_online_stats,
+            online_stats_func=online_stats_func,
+            num_samples_online_stats=num_samples_online_stats,
+            run_until_convergence=run_until_convergence,
             verbose=verbose,
         )
 
@@ -475,10 +483,12 @@ class SKRock(MonteCarlo):
     :param deepinv.optim.ScorePrior, torch.nn.Module prior: negative log-prior based on a trained or model-based denoiser.
     :param deepinv.optim.DataFidelity, torch.nn.Module data_fidelity: negative log-likelihood function linked with the
         noise distribution in the acquisition physics.
-    :param float step_size: Step size of the algorithm. Tip: use physics.lipschitz to compute the Lipschitz
+    :param float step_size: Step size of the algorithm. Tip: use physics.lipschitz to compute the Lipschitz.
+    :param float sigma: noise level used in the plug-and-play prior denoiser. A larger value of sigma will result in
+        a more regularized reconstruction.
+    :param float alpha: regularization parameter :math:`\alpha`.
     :param int inner_iter: Number of inner SKROCK iterations.
     :param float eta: :math:`\eta` SKROCK damping parameter.
-    :param float alpha: regularization parameter :math:`\alpha`.
     :param int max_iter: Number of outer iterations.
     :param float burnin_ratio: percentage of iterations used for burn-in period. The burn-in samples are discarded
         constant with a numerical algorithm.
@@ -492,8 +502,7 @@ class SKRock(MonteCarlo):
     :param Callable g_statistic: The sampler will compute the posterior mean and variance
         of the function g_statistic. By default, it is the identity function (lambda x: x),
         and thus the sampler computes the posterior mean and variance.
-    :param float sigma: noise level used in the plug-and-play prior denoiser. A larger value of sigma will result in
-        a more regularized reconstruction.
+
     :param bool verbose: prints progress of the algorithm.
 
     """
@@ -503,9 +512,10 @@ class SKRock(MonteCarlo):
         prior: deepinv.optim.ScorePrior,
         data_fidelity,
         step_size=1.0,
+        sigma=0.05,
+        alpha=1.0,
         inner_iter=10,
         eta=0.05,
-        alpha=1.0,
         max_iter=1e3,
         burnin_ratio=0.2,
         thinning=10,
@@ -514,7 +524,10 @@ class SKRock(MonteCarlo):
         thresh_conv=1e-3,
         save_chain=False,
         g_statistic=lambda x: x,
-        sigma=0.05,
+        save_online_stats=False,
+        online_stats_func=[],
+        num_samples_online_stats=50,
+        run_until_convergence=False,
         verbose=False,
     ):
         iterator = SKRockIterator(
@@ -536,6 +549,10 @@ class SKRock(MonteCarlo):
             clip=clip,
             thinning=thinning,
             save_chain=save_chain,
+            save_online_stats=save_online_stats,
+            online_stats_func=online_stats_func,
+            num_samples_online_stats=num_samples_online_stats,
+            run_until_convergence=run_until_convergence,
             verbose=verbose,
         )
 
